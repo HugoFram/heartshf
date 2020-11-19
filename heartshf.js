@@ -74,7 +74,23 @@ function (dojo, declare) {
                 }
             }
             
-            this.playerHand.addToStockWithId( this.getCardUniqueId( 2, 5 ), 42 );
+            console.log(this.gamedatas);
+
+            // Cards in player's hand
+            for (var i in this.gamedatas.hand) {
+                var card = this.gamedatas.hand[i];
+                var suit = card.type;
+                var value = card.type_arg;
+                this.playerHand.addToStockWithId( this.getCardUniqueId( suit, value ), card.id );
+            }
+
+            // Cards played on the table
+            for (var i in this.gamedatas.cardsontable) {
+                var card = this.gamedatas.cardsontable[i];
+                var suit = card.type;
+                var value = card.type_arg;
+                this.playCardOnTable(player_id, suit, value, card.id);
+            }
 
             dojo.connect(this.playerHand, 'onChangeSelection', this, 'onPlayerHandSelectionChanged');
 
@@ -182,6 +198,28 @@ function (dojo, declare) {
             return (suit - 1) * 13 + (value - 2);
         },
 
+        playCardOnTable: function(player_id, suit, value, card_id) {
+            dojo.place(this.format_block('jstpl_cardontable', {
+                player_id: player_id,
+                x: this.cardwidth * (value - 2),
+                y: this.cardheight * (suit - 1)
+            }), 'playertablecard_' + player_id);
+
+            if (player_id != this.player_id) {
+                // Some opponent played a card
+                // Move card from player panel
+                this.placeOnObject('cardontable_' + player_id, 'overall_player_board_' + player_id);
+            } else {
+                // You played a card. If it exists in your and, move the card from there and remove corresponding item
+                if ($('myhand_item_' + card_id)) {
+                    this.placeOnObject('cardontable_' + player_id, 'myhand_item_' + card_id);
+                    this.playerHand.removeFromStockById(card_id);
+                }
+            }
+
+            // In any case: move it to its final destination
+            this.slideToObject('cardontable_' + player_id, 'playertablecard_' + player_id).play();
+        },
 
         ///////////////////////////////////////////////////
         //// Player's action
@@ -240,6 +278,12 @@ function (dojo, declare) {
 
                     var card_id = items[0].id;
                     console.log("on playCard " + card_id);
+
+                    var type = items[0].type;
+                    var suit = Math.floor(type / 13) + 1;
+                    var value = type % 13 + 2;
+
+                    this.playCardOnTable(this.player_id, suit, value, card_id);
 
                     this.playerHand.unselectAll();
                 } else if (this.checkAction('giveCards')) {

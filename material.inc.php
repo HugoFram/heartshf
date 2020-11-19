@@ -32,7 +32,7 @@ $this->card_types = array(
 
 */
 
-$this->colors = array(
+$this->suits = array(
   1 => array( 'name' => clienttranslate('spade'),
               'nametr' => self::_('spade') ),
   2 => array( 'name' => clienttranslate('heart'),

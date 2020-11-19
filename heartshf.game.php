@@ -45,7 +45,7 @@ class heartshf extends Table
             // Suit of the current trick (0 = none, 1 = spades, 2 = hearts, 3 = clubs, 4 = diamonds)
             "trickSuit" => 11, 
             // Has a player already played a heart card in this round (0 = No, 1 = Yes)
-            "alreadyPlayerHearts" => 12 
+            "alreadyPlayedHearts" => 12 
         ) );
 
         $this->cards = self::getNew("module.common.deck");
@@ -93,7 +93,7 @@ class heartshf extends Table
         //self::setGameStateInitialValue( 'my_first_global_variable', 0 );
         
         self::setGameStateInitialValue('currentHandType', 0); // left
-        self::setGameStateInitialValue('trickColor', 0); // no trick color
+        self::setGameStateInitialValue('trickSuit', 0); // no trick suit
         self::setGameStateInitialValue('alreadyPlayedHearts', 0); // no hearts already played this round
 
         // Init game statistics
@@ -112,6 +112,13 @@ class heartshf extends Table
             }
         }
         $this->cards->createCards($cards, 'deck');
+
+        // Shuffle deck
+        $this->cards->shuffle('deck');
+        $players = self::loadPlayersBasicInfos();
+        foreach ($players as $player_id => $player) {
+            $cards = $this->cards->pickCards(13, 'deck', $player_id);
+        }
 
         // Activate first player (which is in general a good idea :) )
         $this->activeNextPlayer();
@@ -141,6 +148,12 @@ class heartshf extends Table
   
         // TODO: Gather all information about current game situation (visible by player $current_player_id).
   
+        // Cards in player hand
+        $result['hand'] = $this->cards->getCardsInLocation('hand', $current_player_id);
+
+        // Cards played on the table
+        $result['cardsontable'] = $this->cards->getCardsInLocation('cardsontable');
+
         return $result;
     }
 
