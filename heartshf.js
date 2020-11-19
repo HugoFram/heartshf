@@ -66,7 +66,7 @@ function (dojo, declare) {
             this.playerHand.image_items_per_row = 13;
 
             for (var suit = 1; suit <= 4; suit++) {
-                for (var value = 1; value <= 13; value++) {
+                for (var value = 2; value <= 14; value++) {
                     // Build card type id
                     var card_type_id = this.getCardUniqueId(suit, value);
                     // card id, card weight (for sorting), cards sprite, card position in the sprite
@@ -74,8 +74,6 @@ function (dojo, declare) {
                 }
             }
             
-            console.log(this.gamedatas);
-
             // Cards in player's hand
             for (var i in this.gamedatas.hand) {
                 var card = this.gamedatas.hand[i];
@@ -89,6 +87,7 @@ function (dojo, declare) {
                 var card = this.gamedatas.cardsontable[i];
                 var suit = card.type;
                 var value = card.type_arg;
+                console.log(card.id);
                 this.playCardOnTable(player_id, suit, value, card.id);
             }
 
@@ -199,11 +198,19 @@ function (dojo, declare) {
         },
 
         playCardOnTable: function(player_id, suit, value, card_id) {
+            console.log("player_id: " + player_id + " suit: " + suit + " value: " + value + " card_id: " + card_id);
+
             dojo.place(this.format_block('jstpl_cardontable', {
                 player_id: player_id,
                 x: this.cardwidth * (value - 2),
                 y: this.cardheight * (suit - 1)
             }), 'playertablecard_' + player_id);
+
+            console.log({
+                player_id: player_id,
+                x: this.cardwidth * (value - 2),
+                y: this.cardheight * (suit - 1)
+            });
 
             if (player_id != this.player_id) {
                 // Some opponent played a card
@@ -279,11 +286,10 @@ function (dojo, declare) {
                     var card_id = items[0].id;
                     console.log("on playCard " + card_id);
 
-                    var type = items[0].type;
-                    var suit = Math.floor(type / 13) + 1;
-                    var value = type % 13 + 2;
-
-                    this.playCardOnTable(this.player_id, suit, value, card_id);
+                    this.ajaxcall("/heartshf/heartshf/playCard.html", {
+                        id: card_id,
+                        lock: true
+                    }, this, function(result) {}, function(is_error) {});
 
                     this.playerHand.unselectAll();
                 } else if (this.checkAction('giveCards')) {
@@ -321,6 +327,11 @@ function (dojo, declare) {
             // dojo.subscribe( 'cardPlayed', this, "notif_cardPlayed" );
             // this.notifqueue.setSynchronous( 'cardPlayed', 3000 );
             // 
+            dojo.subscribe("newHand", this, "notif_newHand");
+            dojo.subscribe("playCard", this, "notif_playCard");
+            dojo.subscribe( 'trickWin', this, "notif_trickWin" );
+            this.notifqueue.setSynchronous( 'trickWin', 1000 );
+            dojo.subscribe( 'giveAllCardsToPlayer', this, "notif_giveAllCardsToPlayer" );
         },  
         
         // TODO: from this point and below, you can write your game notifications handling methods
@@ -339,5 +350,38 @@ function (dojo, declare) {
         },    
         
         */
+
+        notif_newHand: function(notif) {
+            // We received a new full hand of 13 cards.
+            this.playerHand.removeAll();
+
+            for ( var i in notif.args.cards) {
+                var card = notif.args.cards[i];
+                var suit = card.type;
+                var value = card.type_arg;
+                this.playerHand.addToStockWithId(this.getCardUniqueId(suit, value), card.id);
+            }
+        },
+
+        notif_playCard: function(notif) {
+            // Play a card on the table
+            console.log(notif);
+            this.playCardOnTable(notif.args.player_id, notif.args.suit, notif.args.value, notif.args.card_id);
+        },
+
+        notif_trickWin : function(notif) {
+            // We do nothing here (just wait in order players can view the 4 cards played before they're gone.
+        },
+        notif_giveAllCardsToPlayer : function(notif) {
+            // Move all cards on table to given table, then destroy them
+            var winner_id = notif.args.player_id;
+            for ( var player_id in this.gamedatas.players) {
+                var anim = this.slideToObject('cardontable_' + player_id, 'overall_player_board_' + winner_id);
+                dojo.connect(anim, 'onEnd', function(node) {
+                    dojo.destroy(node);
+                });
+                anim.play();
+            }
+        },
    });             
 });

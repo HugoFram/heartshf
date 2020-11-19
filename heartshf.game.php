@@ -223,7 +223,22 @@ class heartshf extends Table
     function playCard($card_id) {
         self::checkAction("playCard");
         $player_id = self::getActivePlayerId();
-        throw new BgaUserException(self::_("Not implemented: ") . "$player_id plays $card_id");
+
+        $this->cards->moveCard($card_id, 'cardsontable', $player_id);
+        $current_card = $this->cards->getCard($card_id);
+
+        // Notify client of all players that the card has been played
+        self::notifyAllPlayers("playCard", clienttranslate('${player_name} plays ${value_displayed} ${suit_displayed}'), array(
+            'i18n' => array('suit_displayed', 'value_displayed'), 
+            'card_id' => $card_id, 
+            'player_id' => $player_id,
+            'player_name' => self::getActivePlayerName(),
+            'value' => $current_card['type_arg'],
+            'suit' => $current_card['type'],
+            'value_displayed' => $this->values_label[$current_card['type_arg']],
+            'suit_displayed' => $this->suits[$current_card['type']]['name']
+        ));
+        $this->gamestate->nextState('playCard');
     }
 
     
@@ -310,6 +325,18 @@ class heartshf extends Table
             // Move all cards to "cardswon" of the given player
             $best_value_player_id = self::activeNextPlayer(); // TODO figure out winner of trick
             $this->cards->moveAllCardsInLocation('cardsontable', 'cardswon', null, $best_value_player_id);
+
+            // Notify
+            // Note: we use 2 notifications here in order we can pause the display during the first notification
+            //  before we move all cards to the winner (during the second)
+            $players = self::loadPlayersBasicInfos();
+            self::notifyAllPlayers( 'trickWin', clienttranslate('${player_name} wins the trick'), array(
+                'player_id' => $best_value_player_id,
+                'player_name' => $players[ $best_value_player_id ]['player_name']
+            ) );            
+            self::notifyAllPlayers( 'giveAllCardsToPlayer','', array(
+                'player_id' => $best_value_player_id
+            ) );
         
             if ($this->cards->countCardInLocation('hand') == 0) {
                 // End of the hand
