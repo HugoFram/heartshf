@@ -65,10 +65,10 @@ function (dojo, declare) {
             this.playerHand.create(this, $('myhand'), this.cardwidth, this.cardheight);
             this.playerHand.image_items_per_row = 13;
 
-            for (var suite = 1; suite <= 4; suite++) {
+            for (var suit = 1; suit <= 4; suit++) {
                 for (var value = 1; value <= 13; value++) {
                     // Build card type id
-                    var card_type_id = this.getCardUniqueId(suite, value);
+                    var card_type_id = this.getCardUniqueId(suit, value);
                     // card id, card weight (for sorting), cards sprite, card position in the sprite
                     this.playerHand.addItemType(card_type_id, card_type_id, g_gamethemeurl + 'img/cards.jpg', card_type_id);
                 }
@@ -178,8 +178,8 @@ function (dojo, declare) {
         */
 
         // Get card unique identifier based on its suit and value
-        getCardUniqueId: function(suite, value) {
-            return (suite - 1) * 13 + (value - 2);
+        getCardUniqueId: function(suit, value) {
+            return (suit - 1) * 13 + (value - 2);
         },
 
 

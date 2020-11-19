@@ -39,9 +39,13 @@ class heartshf extends Table
             //    "my_first_game_variant" => 100,
             //    "my_second_game_variant" => 101,
             //      ...
-            "currentHandType" => 10,
-            "trickColor" => 11,
-            "alreadyPlayerHearts" => 12
+
+            // Where to pass cards at the beginning of the round (0 = left, 1 = right, 2 = front, 3 = keep cards)
+            "currentHandType" => 10, 
+            // Suit of the current trick (0 = none, 1 = spades, 2 = hearts, 3 = clubs, 4 = diamonds)
+            "trickSuit" => 11, 
+            // Has a player already played a heart card in this round (0 = No, 1 = Yes)
+            "alreadyPlayerHearts" => 12 
         ) );
 
         $this->cards = self::getNew("module.common.deck");
@@ -88,13 +92,26 @@ class heartshf extends Table
         // Init global values with their initial values
         //self::setGameStateInitialValue( 'my_first_global_variable', 0 );
         
+        self::setGameStateInitialValue('currentHandType', 0); // left
+        self::setGameStateInitialValue('trickColor', 0); // no trick color
+        self::setGameStateInitialValue('alreadyPlayedHearts', 0); // no hearts already played this round
+
         // Init game statistics
         // (note: statistics used in this file must be defined in your stats.inc.php file)
         //self::initStat( 'table', 'table_teststat1', 0 );    // Init a table statistics
         //self::initStat( 'player', 'player_teststat1', 0 );  // Init a player statistics (for all players)
 
         // TODO: setup the initial game situation here
-       
+
+        // Create cards
+        $cards = array();
+        foreach ($this->suits as $suit_id => $suit) {
+            // spade, heart, clubs, diamonds
+            for ($value = 2; $value <= 14; $value++) {
+                $cards[] = array('type' => $suit_id, 'type_arg' => $value, 'nbr' => 1);
+            }
+        }
+        $this->cards->createCards($cards, 'deck');
 
         // Activate first player (which is in general a good idea :) )
         $this->activeNextPlayer();
