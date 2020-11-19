@@ -220,6 +220,12 @@ class heartshf extends Table
     
     */
 
+    function playCard($card_id) {
+        self::checkAction("playCard");
+        $player_id = self::getActivePlayerId();
+        throw new BgaUserException(self::_("Not implemented: ") . "$player_id plays $card_id");
+    }
+
     
 //////////////////////////////////////////////////////////////////////////////
 //////////// Game state arguments
@@ -248,6 +254,10 @@ class heartshf extends Table
     }    
     */
 
+    function argGiveCards() {
+        return array();
+    }
+
 //////////////////////////////////////////////////////////////////////////////
 //////////// Game state actions
 ////////////
@@ -269,6 +279,57 @@ class heartshf extends Table
         $this->gamestate->nextState( 'some_gamestate_transition' );
     }    
     */
+
+    function stNewHand() {
+        // Tak back all cards (from any location => null) to deck
+        $this->cards->moveAllCardsInLocation(null, "deck");
+        $this->cards->shuffle('deck');
+
+        // Deal 13 cards to each players
+        $players = self::loadPlayersBasicInfos();
+        foreach ($players as $player_id => $player) {
+            $cards = $this->cards->pickCards(13, 'deck', $player_id);
+            // Notify player about his cards
+            self::notifyPlayer($player_id, 'newHand', '', array('cards' => $cards));
+        }
+        self::setGameStateValue('alreadyPlayedHearts', 0);
+        $this->gamestate->nextState("");
+    }
+
+    function stNewTrick() {
+        // New trick: active the player who wins the last trick, or the player who own the club-2 card
+        // Reset trick suit to 0 (= no suit)
+        self::setGameStateInitialValue('trickSuit', 0);
+        $this->gamestate->nextState();
+    }
+
+    function stNextPlayer() {
+        // Active next player OR end the trick and go to the next trick OR end the hand
+        if ($this->cards->countCardInLocation('cardsontable') == 4) {
+            // This is the end of the trick
+            // Move all cards to "cardswon" of the given player
+            $best_value_player_id = self::activeNextPlayer(); // TODO figure out winner of trick
+            $this->cards->moveAllCardsInLocation('cardsontable', 'cardswon', null, $best_value_player_id);
+        
+            if ($this->cards->countCardInLocation('hand') == 0) {
+                // End of the hand
+                $this->gamestate->nextState("endHand");
+            } else {
+                // End of the trick
+                $this->gamestate->nextState("nextTrick");
+            }
+        } else {
+            // Standard case (not the end of the trick)
+            // => just active the next player
+            $player_id = self::activeNextPlayer();
+            self::giveExtraTime($player_id);
+            $this->gamestate->nextState('nextPlayer');
+        }
+    }
+
+    function stEndHand() {
+        $this->gamestate->nextState("nextHand");
+    }
 
 //////////////////////////////////////////////////////////////////////////////
 //////////// Zombie
