@@ -39,7 +39,13 @@ class heartshf extends Table
             //    "my_first_game_variant" => 100,
             //    "my_second_game_variant" => 101,
             //      ...
-        ) );        
+            "currentHandType" => 10,
+            "trickColor" => 11,
+            "alreadyPlayerHearts" => 12
+        ) );
+
+        $this->cards = self::getNew("module.common.deck");
+        $this->cards->init("card");
 	}
 	
     protected function getGameName( )
