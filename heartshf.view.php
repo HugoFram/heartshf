@@ -76,7 +76,19 @@
         
         */
 
+        $directions = array("S", "W", "N", "E");
 
+        $this->page->begin_block("heartshf_heartshf", "player");
+        foreach($players as $player_id => $player) {
+          $this->page->insert_block("player", array(
+            "DIR" => array_shift($directions),
+            "PLAYER_COLOR" => $player['player_color'],
+            "PLAYER_NAME" => $player['player_name'],
+            "PLAYER_ID" => $player['player_id']
+          ));
+        }
+        // this will make our My Hand text translatable
+        $this->tpl['MY_HAND'] = self::_("My hand");
 
         /*********** Do not change anything below this line  ************/
   	}
