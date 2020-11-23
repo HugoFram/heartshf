@@ -223,14 +223,61 @@ class heartshf extends Table
     function playCard($card_id) {
         self::checkAction("playCard");
         $player_id = self::getActivePlayerId();
-
-        $this->cards->moveCard($card_id, 'cardsontable', $player_id);
         $current_card = $this->cards->getCard($card_id);
-
         $currentTrickSuit = self::getGameStateValue('trickSuit');
-        if ($currentTrickSuit == 0) {
-            self::setGameStateValue('trickSuit', $current_card['type']);
+        $is_heart_already_played = self::getGameStateValue('alreadyPlayedHearts');
+        $cards_in_hand = $this->cards->getCardsInLocation("hand", $player_id);
+
+        // Rules specific for the first trick of a round
+        if (count($cards_in_hand) == 13) {
+            // First trick of the round
+            // Check if it is the first card of the trick
+            if ($currentTrickSuit == 0) {
+                // First card of the trick => Must play 2-clubs
+                if (!($current_card['type_arg'] == 2 && $current_card['type'] == 3)) {
+                    throw new BgaUserException(self::_("You must play the 2 of clubs."));
+                }
+            } else {
+                // Not first card of the trick => Cannot play points
+                if ($current_card['type'] == 2 || ($current_card['type_arg'] == 12 && $current_card['type'] == 1)) {
+                    throw new BgaUserException(self::_("You can't play points in the first round."));
+                }
+            }
         }
+        // Rules for any trick
+        // Check if it is the first card of the trick
+        if ($currentTrickSuit != 0) {
+            // Not first card of the trick => Must play a card of the same suit if possible
+            if ($current_card['type'] != $currentTrickSuit) {
+                // The card is not of the same suit as the current trick
+                // Check if the player has any card of the current trick suit in hand
+                foreach ($cards_in_hand as $card) {
+                    if ($card['type'] == $currentTrickSuit) {
+                        throw new BgaUserException( self::_("You must play a card of the current trick suit."));
+                    }
+                }
+            }
+        } else {
+            // First card of the trick => Cannot start with hearts if no heart has been played yet
+            if (!$is_heart_already_played && $current_card['type'] == 2) {
+                throw new BgaUserException(self::_("You can't start the trick with heart if not heart card has been played before."));
+            }
+        }
+
+        // If no exception was thrown at this stage, the card can be played
+
+        
+        
+
+        // Set the current trick suit to the card played
+        self::setGameStateValue('trickSuit', $current_card['type']);
+        // If it is the first heart played, set the alreadyPlayedHearts gamestate to true
+        if (!self::getGameStateValue('alreadyPlayedHearts') && $current_card['type'] == 2) {
+            self::setGameStateValue('alreadyPlayedHearts', 1);
+        }
+
+        // Move the card to the table
+        $this->cards->moveCard($card_id, 'cardsontable', $player_id);
 
         // Notify client of all players that the card has been played
         self::notifyAllPlayers("playCard", clienttranslate('${player_name} plays ${value_displayed} ${suit_displayed}'), array(
@@ -311,6 +358,8 @@ class heartshf extends Table
             $cards = $this->cards->pickCards(13, 'deck', $player_id);
             // Notify player about his cards
             self::notifyPlayer($player_id, 'newHand', '', array('cards' => $cards));
+
+            // 
         }
         self::setGameStateValue('alreadyPlayedHearts', 0);
         $this->gamestate->nextState("");
@@ -318,6 +367,13 @@ class heartshf extends Table
 
     function stNewTrick() {
         // New trick: active the player who wins the last trick, or the player who own the club-2 card
+        $twoClubCardOwner = self::getUniqueValueFromDb( "SELECT card_location_arg FROM card
+                                                         WHERE card_location='hand'
+                                                         AND card_type='3' AND card_type_arg='2' " );
+        if ($twoClubCardOwner !== null) {
+            $this->gamestate->changeActivePlayer($twoClubCardOwner);
+        }
+
         // Reset trick suit to 0 (= no suit)
         self::setGameStateInitialValue('trickSuit', 0);
         $this->gamestate->nextState();
@@ -375,7 +431,51 @@ class heartshf extends Table
         }
     }
 
-    function stEndHand() {        
+    function stEndHand() {
+        // Count and score points, then end the game or go to the next hand.
+        $players = self::loadPlayersBasicInfos();
+        // Gets all "hearts" + queen of spades
+
+        $player_to_points = array ();
+        foreach ( $players as $player_id => $player ) {
+            $player_to_points [$player_id] = 0;
+        }
+        $cards = $this->cards->getCardsInLocation("cardswon");
+        foreach ( $cards as $card ) {
+            $player_id = $card ['location_arg'];
+            // Note: 2 = heart
+            if ($card ['type'] == 2) {
+                $player_to_points [$player_id] ++;
+            }
+        }
+        // Apply scores to player
+        foreach ( $player_to_points as $player_id => $points ) {
+            if ($points != 0) {
+                $sql = "UPDATE player SET player_score=player_score-$points  WHERE player_id='$player_id'";
+                self::DbQuery($sql);
+                $heart_number = $player_to_points [$player_id];
+                self::notifyAllPlayers("points", clienttranslate('${player_name} gets ${nbr} hearts and looses ${nbr} points'), array (
+                        'player_id' => $player_id,'player_name' => $players [$player_id] ['player_name'],
+                        'nbr' => $heart_number ));
+            } else {
+                // No point lost (just notify)
+                self::notifyAllPlayers("points", clienttranslate('${player_name} did not get any hearts'), array (
+                        'player_id' => $player_id,'player_name' => $players [$player_id] ['player_name'] ));
+            }
+        }
+        $newScores = self::getCollectionFromDb("SELECT player_id, player_score FROM player", true );
+        self::notifyAllPlayers( "newScores", '', array( 'newScores' => $newScores ) );
+
+        ///// Test if this is the end of the game
+        foreach ( $newScores as $player_id => $score ) {
+            if ($score <= -100) {
+                // Trigger the end of the game !
+                $this->gamestate->nextState("endGame");
+                return;
+            }
+        }
+
+        
         $this->gamestate->nextState("nextHand");
     }
 
