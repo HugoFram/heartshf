@@ -227,6 +227,11 @@ class heartshf extends Table
         $this->cards->moveCard($card_id, 'cardsontable', $player_id);
         $current_card = $this->cards->getCard($card_id);
 
+        $currentTrickSuit = self::getGameStateValue('trickSuit');
+        if ($currentTrickSuit == 0) {
+            self::setGameStateValue('trickSuit', $current_card['type']);
+        }
+
         // Notify client of all players that the card has been played
         self::notifyAllPlayers("playCard", clienttranslate('${player_name} plays ${value_displayed} ${suit_displayed}'), array(
             'i18n' => array('suit_displayed', 'value_displayed'), 
@@ -322,8 +327,24 @@ class heartshf extends Table
         // Active next player OR end the trick and go to the next trick OR end the hand
         if ($this->cards->countCardInLocation('cardsontable') == 4) {
             // This is the end of the trick
+
+            $cards_on_table = $this->cards->getCardsInLocation('cardsontable');
+            $best_value = 0;
+            $best_value_player_id = null;
+            $currentTrickSuit = self::getGameStateValue('trickSuit');
+            foreach ($cards_on_table as $card) {
+                if ($card['type'] == $currentTrickSuit) {
+                    if ($best_value_player_id === null || $card['type_arg'] > $best_value) {
+                        $best_value_player_id = $card['location_arg']; // Note: location_arg = player who played this card on table
+                        $best_value = $card['type_arg']; // Note: type_arg = value of the card
+                    }
+                }
+            }
+
+            // Active this player => he's the one who starts the next trick
+            $this->gamestate->changeActivePlayer($best_value_player_id);
+            
             // Move all cards to "cardswon" of the given player
-            $best_value_player_id = self::activeNextPlayer(); // TODO figure out winner of trick
             $this->cards->moveAllCardsInLocation('cardsontable', 'cardswon', null, $best_value_player_id);
 
             // Notify
@@ -354,7 +375,7 @@ class heartshf extends Table
         }
     }
 
-    function stEndHand() {
+    function stEndHand() {        
         $this->gamestate->nextState("nextHand");
     }
 
