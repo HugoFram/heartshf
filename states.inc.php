@@ -69,7 +69,7 @@ $machinestates = array(
         "type" => "game",
         "action" => "stNewHand",
         "updateGameProgression" => true,   
-        "transitions" => array( "" => 30 )
+        "transitions" => array( "" => 21 )
     ),    
 
     21 => array(       

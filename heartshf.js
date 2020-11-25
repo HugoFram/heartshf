@@ -178,6 +178,9 @@ function (dojo, declare) {
                     this.addActionButton( 'button_3_id', _('Button 3 label'), 'onMyMethodToCall3' ); 
                     break;
 */
+                case 'giveCards':
+                    this.addActionButton('give_cards', _('Give Cards'), "onGiveCards");
+                    break;
                 }
             }
         },        
@@ -299,6 +302,35 @@ function (dojo, declare) {
                 }
             }
         },
+
+        onGiveCards: function() {
+            if (!this.checkAction("giveCards")) {
+                return;
+            } else {
+                var items = this.playerHand.getSelectedItems();
+
+                // Check if exactly three are selected
+                if (items.length != 3) {
+                    this.showMessage( _("You must select exactly 3 cards"), 'error' );
+                } else {
+                    var card_ids = items.map(item => item.id);
+    
+                    console.log("on giveCards " + card_ids);
+
+                    var card_ids_string = "";
+                    for (var i in card_ids) {
+                        card_ids_string += card_ids[i] + ";";
+                    }
+    
+                    this.ajaxcall("/heartshf/heartshf/giveCards.html", {
+                        card_ids: card_ids_string,
+                        lock: true
+                    }, this, function(result) {}, function(is_error) {});
+    
+                    this.playerHand.unselectAll();
+                }
+            }
+        },
         
         ///////////////////////////////////////////////////
         //// Reaction to cometD notifications
@@ -328,6 +360,7 @@ function (dojo, declare) {
             // this.notifqueue.setSynchronous( 'cardPlayed', 3000 );
             // 
             dojo.subscribe("newHand", this, "notif_newHand");
+            dojo.subscribe("takeCards", this, "notif_takeCards");
             dojo.subscribe("playCard", this, "notif_playCard");
             dojo.subscribe( 'trickWin', this, "notif_trickWin" );
             this.notifqueue.setSynchronous( 'trickWin', 1000 );
@@ -362,6 +395,21 @@ function (dojo, declare) {
                 var suit = card.type;
                 var value = card.type_arg;
                 this.playerHand.addToStockWithId(this.getCardUniqueId(suit, value), card.id);
+            }
+        },
+
+        notif_takeCards: function(notif){
+            var cards = notif.args.cards;
+
+            for (var card_idx in cards) {
+                var card = cards[card_idx];
+                console.log(card);
+
+                if (this.playerHand.getAllItems().map(item => item.id).indexOf(card.id) != -1) {
+                    this.playerHand.removeFromStock(this.getCardUniqueId(card.type, card.type_arg));
+                } else if (card.location_arg == this.player_id) {
+                    this.playerHand.addToStockWithId(this.getCardUniqueId(card.type, card.type_arg), card.id);
+                }
             }
         },
 

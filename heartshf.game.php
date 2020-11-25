@@ -220,6 +220,47 @@ class heartshf extends Table
     
     */
 
+    function giveCards($card_ids) {
+        self::checkAction("giveCards");
+        $player_id = self::getCurrentPlayerId();
+
+        $sql = "SELECT player_id, player_no FROM player";
+        $players = self::getCollectionFromDB($sql, true);
+
+        $player_position = $players[$player_id];
+        $current_hand_type = self::getGameStateValue('currentHandType');
+
+        // Get position of the player to whom give the card
+        switch($current_hand_type) {
+            case 0: // Left
+                $other_player_position = ((($player_position - 1) + 1) % 4) + 1;
+                break;
+            case 1: // Right
+                $other_player_position = ((($player_position - 1) + 3) % 4) + 1;
+                break;
+            case 2: // Front
+                $other_player_position = ((($player_position - 1) + 2) % 4) + 1;
+                break;
+        }
+        
+        // Get the player id of the player to whom give the 
+        $other_player_id = array_search($other_player_position, $players);
+
+        // Update location of cards given to the other player
+        $sql = "UPDATE card SET card_location_arg = $other_player_id WHERE card_id IN (";
+        $values = array();
+        foreach($card_ids as $card_id) {
+            $values[] = $card_id;
+            $this->cards->moveCard($card_id, "exchanging");
+        }
+        $sql .= implode(",", $values) . ")";
+        self::DbQuery($sql);
+
+        // Make this player unactive now
+        // (and tell the machine state to use transtion "giveCards" if all players are now unactive
+        $this->gamestate->setPlayerNonMultiactive($player_id, "giveCards");
+    }
+
     function playCard($card_id) {
         self::checkAction("playCard");
         $player_id = self::getActivePlayerId();
@@ -245,7 +286,7 @@ class heartshf extends Table
             }
         }
         // Rules for any trick
-        // Check if it is the first card of the trick
+        // Check if it is not the first card of the trick
         if ($currentTrickSuit != 0) {
             // Not first card of the trick => Must play a card of the same suit if possible
             if ($current_card['type'] != $currentTrickSuit) {
@@ -262,15 +303,14 @@ class heartshf extends Table
             if (!$is_heart_already_played && $current_card['type'] == 2) {
                 throw new BgaUserException(self::_("You can't start the trick with heart if not heart card has been played before."));
             }
+            // Set the current trick suit to the card played
+            self::setGameStateValue('trickSuit', $current_card['type']);
         }
 
         // If no exception was thrown at this stage, the card can be played
 
         
         
-
-        // Set the current trick suit to the card played
-        self::setGameStateValue('trickSuit', $current_card['type']);
         // If it is the first heart played, set the alreadyPlayedHearts gamestate to true
         if (!self::getGameStateValue('alreadyPlayedHearts') && $current_card['type'] == 2) {
             self::setGameStateValue('alreadyPlayedHearts', 1);
@@ -322,7 +362,26 @@ class heartshf extends Table
     */
 
     function argGiveCards() {
-        return array();
+        $direction = self::getGameStateValue('currentHandType');
+
+        switch ($direction) {
+            case 0:
+                $dir_text = "the player on the left";
+                break;
+            case 1:
+                $dir_text = "the player on the right";
+                break;
+            case 2:
+                $dir_text = "the player across the table";
+                break;
+            case 3:
+                $dir_text = "no one";
+        }
+
+        return array(
+            "i18n" => array('direction'),
+            'direction' => $dir_text
+        );
     }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -358,11 +417,37 @@ class heartshf extends Table
             $cards = $this->cards->pickCards(13, 'deck', $player_id);
             // Notify player about his cards
             self::notifyPlayer($player_id, 'newHand', '', array('cards' => $cards));
-
-            // 
         }
         self::setGameStateValue('alreadyPlayedHearts', 0);
         $this->gamestate->nextState("");
+    }
+
+    function stGiveCards() {
+        $hand_type = self::getGameStateValue('currentHandType');
+
+        // Check if it is a round where no cards are exchanged 
+        if ($hand_type == 3) {
+            $this->gamestate->nextState("skip");
+        } else {
+            // Active all players (everyone has to choose 3 cards to give)
+            $this->gamestate->setAllPlayersMultiactive();
+        }
+    }
+
+    function stTakeCards() {
+        $hand_type = self::getGameStateValue('currentHandType');
+
+        // Check if it is a round where no cards are exchanged 
+        if ($hand_type == 3) {
+            $this->gamestate->nextState("skip");
+        } else {
+            $exchanged_cards = $this->cards->getCardsInLocation('exchanging');
+            $this->cards->moveAllCardsInLocationKeepOrder('exchanging', 'hand');
+            self::notifyAllPlayers("takeCards", "", array(
+                'cards' => $exchanged_cards
+            ));
+            $this->gamestate->nextState("startHand");
+        }
     }
 
     function stNewTrick() {
@@ -475,7 +560,9 @@ class heartshf extends Table
             }
         }
 
-        
+        // Update hand type
+        $current_hand_type = self::getGameStateValue('currentHandType');
+        self::setGameStateValue('currentHandType', ($current_hand_type + 1) % 4);
         $this->gamestate->nextState("nextHand");
     }
 

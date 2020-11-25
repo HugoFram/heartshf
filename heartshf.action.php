@@ -70,6 +70,22 @@
       self::ajaxResponse();
     }
 
+    public function giveCards() {
+      self::setAjaxMode();
+      $card_ids_raw = self::getArg("card_ids", AT_numberlist, true);
+      // Removing last ';' if exists
+      if( substr($card_ids_raw, -1) == ';') {
+        $card_ids_raw = substr($card_ids_raw, 0, -1);
+      }
+      if($card_ids_raw == '') {
+        $card_ids = array();
+      } else {
+        $card_ids = explode(';', $card_ids_raw);
+      }
+      $this->game->giveCards($card_ids);
+      self::ajaxResponse();
+    }
+
   }
   
 
