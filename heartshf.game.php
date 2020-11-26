@@ -75,12 +75,12 @@ class heartshf extends Table
  
         // Create players
         // Note: if you added some extra field on "player" table in the database (dbmodel.sql), you can initialize it there.
-        $sql = "INSERT INTO player (player_id, player_color, player_canal, player_name, player_avatar) VALUES ";
+        $sql = "INSERT INTO player (player_id, player_score, player_color, player_canal, player_name, player_avatar) VALUES ";
         $values = array();
         foreach( $players as $player_id => $player )
         {
             $color = array_shift( $default_colors );
-            $values[] = "('".$player_id."','$color','".$player['player_canal']."','".addslashes( $player['player_name'] )."','".addslashes( $player['player_avatar'] )."')";
+            $values[] = "('".$player_id."',100,'$color','".$player['player_canal']."','".addslashes( $player['player_name'] )."','".addslashes( $player['player_avatar'] )."')";
         }
         $sql .= implode( $values, ',' );
         self::DbQuery( $sql );
@@ -301,7 +301,9 @@ class heartshf extends Table
         } else {
             // First card of the trick => Cannot start with hearts if no heart has been played yet
             if (!$is_heart_already_played && $current_card['type'] == 2) {
-                throw new BgaUserException(self::_("You can't start the trick with heart if not heart card has been played before."));
+                if (count($this->cards->getCardsOfTypeInLocation($type = 2, $type_arg = null, $location = "hand", $location_arg = $player_id)) != count($cards_in_hand)) {
+                    throw new BgaUserException(self::_("You can't start the trick with heart if not heart card has been played before."));
+                }
             }
             // Set the current trick suit to the card played
             self::setGameStateValue('trickSuit', $current_card['type']);
@@ -528,11 +530,27 @@ class heartshf extends Table
         $cards = $this->cards->getCardsInLocation("cardswon");
         foreach ( $cards as $card ) {
             $player_id = $card ['location_arg'];
-            // Note: 2 = heart
+            // Any heart = 1 pt
             if ($card ['type'] == 2) {
                 $player_to_points [$player_id] ++;
             }
+            // Queen of spades = 13 pts
+            if ($card ['type'] == 1 && $card ['type_arg'] == 12 ) {
+                $player_to_points [$player_id] += 13 ;
+            }
         }
+        // Check if a player has all hearts + the queen of spades = he score 0 and the others score 26
+        foreach($player_to_points as $player_id => $points) {
+            if ($points == 26) {
+                $player_to_points[$player_id] = 0;
+                foreach($player_to_points as $player_id2 => $points2) {
+                    if ($player_id2 != $player_id) {
+                        $player_to_points[$player_id2] = 26;
+                    }
+                }
+            }
+        }
+
         // Apply scores to player
         foreach ( $player_to_points as $player_id => $points ) {
             if ($points != 0) {
@@ -553,7 +571,7 @@ class heartshf extends Table
 
         ///// Test if this is the end of the game
         foreach ( $newScores as $player_id => $score ) {
-            if ($score <= -100) {
+            if ($score <= 0) {
                 // Trigger the end of the game !
                 $this->gamestate->nextState("endGame");
                 return;
